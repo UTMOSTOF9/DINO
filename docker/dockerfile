@@ -38,14 +38,21 @@ ENV PATH=$MINICONDA_PREFIX/bin:${PATH}
 
 ARG PYTHON_EXE=$MINICONDA_PREFIX/bin/python
 
-COPY . /code
-WORKDIR /code
 RUN $PYTHON_EXE -m pip install pip wheel ipython fire ninja
 RUN $PYTHON_EXE -m pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
-RUN cd models/dino/ops &&\
-    $PYTHON_EXE -m python setup.py bdist_wheel &&\
-    pip install dist/*.whl &&\
-    cd -
 
+# for dino prequisites
+RUN $PYTHON_EXE -m pip install cython \
+    pycocotools \
+    submitit \
+    git+https://github.com/cocodataset/panopticapi.git#egg=panopticapi \
+    scipy \
+    termcolor \
+    addict \
+    yapf==0.33.0 \
+    timm \
+    opencv-python
+
+WORKDIR /code
 
 CMD bash

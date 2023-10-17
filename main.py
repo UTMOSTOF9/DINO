@@ -18,6 +18,7 @@ from engine import evaluate, test, train_one_epoch
 from torch.utils.data import DataLoader, DistributedSampler
 from util.get_param_dicts import get_param_dict
 from util.logger import setup_logger
+from util.restore_model import freeze_params, restore_params
 from util.slconfig import DictAction, SLConfig
 from util.utils import BestMetricHolder, ModelEma
 
@@ -199,6 +200,7 @@ def main(args):
 
     if args.frozen_weights is not None:
         checkpoint = torch.load(args.frozen_weights, map_location='cpu')
+        model_without_ddp.detr
         model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
     output_dir = Path(args.output_dir)
@@ -210,10 +212,10 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
+        model_without_ddp = restore_params(model_without_ddp, checkpoint['model'])
         if args.use_ema:
             if 'ema_model' in checkpoint:
-                ema_m.module.load_state_dict(utils.clean_state_dict(checkpoint['ema_model']))
+                ema_m.module = restore_params(ema_m.module, utils.clean_state_dict(checkpoint['ema_model']))
             else:
                 del ema_m
                 ema_m = ModelEma(model, args.ema_decay)
@@ -240,12 +242,14 @@ def main(args):
         _tmp_st = OrderedDict({k: v for k, v in utils.clean_state_dict(
             checkpoint).items() if check_keep(k, _ignorekeywordlist)})
 
-        _load_output = model_without_ddp.load_state_dict(_tmp_st, strict=False)
-        logger.info(str(_load_output))
+        model_without_ddp = restore_params(model_without_ddp, _tmp_st)
+        # _load_output = model_without_ddp.load_state_dict(_tmp_st, strict=False)
+        # logger.info(str(_load_output))
 
         if args.use_ema:
             if 'ema_model' in checkpoint:
-                ema_m.module.load_state_dict(utils.clean_state_dict(checkpoint['ema_model']))
+                ema_m.module = restore_params(ema_m.module, utils.clean_state_dict(checkpoint['ema_model']))
+                # ema_m.module.load_state_dict(utils.clean_state_dict(checkpoint['ema_model']), strict=False)
             else:
                 del ema_m
                 ema_m = ModelEma(model, args.ema_decay)
@@ -263,6 +267,8 @@ def main(args):
                 f.write(json.dumps(log_stats) + "\n")
 
         return
+
+    freeze_params(model, args.freeze_layers)
 
     print("Start training")
     start_time = time.time()
