@@ -3,35 +3,33 @@
 import argparse
 import datetime
 import json
+import os
 import random
+import sys
 import time
 from pathlib import Path
-import os, sys
+
+import datasets
 import numpy as np
-
 import torch
+import util.misc as utils
+from datasets import build_dataset, get_coco_api_from_dataset
+from engine import evaluate, test, train_one_epoch
 from torch.utils.data import DataLoader, DistributedSampler
-
 from util.get_param_dicts import get_param_dict
 from util.logger import setup_logger
 from util.slconfig import DictAction, SLConfig
-from util.utils import ModelEma, BestMetricHolder
-import util.misc as utils
-
-import datasets
-from datasets import build_dataset, get_coco_api_from_dataset
-from engine import evaluate, train_one_epoch, test
-
+from util.utils import BestMetricHolder, ModelEma
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--config_file', '-c', type=str, required=True)
     parser.add_argument('--options',
-        nargs='+',
-        action=DictAction,
-        help='override some settings in the used config, the key-value pair '
-        'in xxx=yyy format will be merged into config file.')
+                        nargs='+',
+                        action=DictAction,
+                        help='override some settings in the used config, the key-value pair '
+                        'in xxx=yyy format will be merged into config file.')
 
     # dataset parameters
     parser.add_argument('--dataset_file', default='coco')
@@ -71,7 +69,7 @@ def get_args_parser():
     parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel')
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
-    
+
     return parser
 
 
@@ -82,6 +80,7 @@ def build_model_main(args):
     build_func = MODULE_BUILD_FUNCS.get(args.modelname)
     model, criterion, postprocessors = build_func(args)
     return model, criterion, postprocessors
+
 
 def main(args):
     utils.init_distributed_mode(args)
@@ -99,7 +98,7 @@ def main(args):
             json.dump(vars(args), f, indent=2)
     cfg_dict = cfg._cfg_dict.to_dict()
     args_vars = vars(args)
-    for k,v in cfg_dict.items():
+    for k, v in cfg_dict.items():
         if k not in args_vars:
             setattr(args, k, v)
         else:
@@ -113,9 +112,10 @@ def main(args):
 
     # setup logger
     os.makedirs(args.output_dir, exist_ok=True)
-    logger = setup_logger(output=os.path.join(args.output_dir, 'info.txt'), distributed_rank=args.rank, color=False, name="detr")
+    logger = setup_logger(output=os.path.join(args.output_dir, 'info.txt'),
+                          distributed_rank=args.rank, color=False, name="detr")
     logger.info("git:\n  {}\n".format(utils.get_sha()))
-    logger.info("Command: "+' '.join(sys.argv))
+    logger.info("Command: " + ' '.join(sys.argv))
     if args.rank == 0:
         save_json_path = os.path.join(args.output_dir, "config_args_all.json")
         with open(save_json_path, 'w') as f:
@@ -125,7 +125,6 @@ def main(args):
     logger.info('rank: {}'.format(args.rank))
     logger.info('local_rank: {}'.format(args.local_rank))
     logger.info("args: " + str(args) + '\n')
-
 
     if args.frozen_weights is not None:
         assert args.masks, "Frozen training is meant for segmentation only"
@@ -152,17 +151,18 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=args.find_unused_params)
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[args.gpu], find_unused_parameters=args.find_unused_params)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logger.info('number of params:'+str(n_parameters))
-    logger.info("params:\n"+json.dumps({n: p.numel() for n, p in model.named_parameters() if p.requires_grad}, indent=2))
+    logger.info('number of params:' + str(n_parameters))
+    logger.info("params:\n" + json.dumps({n: p.numel()
+                for n, p in model.named_parameters() if p.requires_grad}, indent=2))
 
     param_dicts = get_param_dict(args, model_without_ddp)
 
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
                                   weight_decay=args.weight_decay)
-    
 
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_val = build_dataset(image_set='val', args=args)
@@ -183,12 +183,12 @@ def main(args):
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
     if args.onecyclelr:
-        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(data_loader_train), epochs=args.epochs, pct_start=0.2)
+        lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=args.lr, steps_per_epoch=len(data_loader_train), epochs=args.epochs, pct_start=0.2)
     elif args.multi_step_lr:
         lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_drop_list)
     else:
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
-
 
     if args.dataset_file == "coco_panoptic":
         # We also evaluate AP during panoptic training, on original coco DS
@@ -216,7 +216,7 @@ def main(args):
                 ema_m.module.load_state_dict(utils.clean_state_dict(checkpoint['ema_model']))
             else:
                 del ema_m
-                ema_m = ModelEma(model, args.ema_decay)                
+                ema_m = ModelEma(model, args.ema_decay)
 
         if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -237,7 +237,8 @@ def main(args):
             return True
 
         logger.info("Ignore keys: {}".format(json.dumps(ignorelist, indent=2)))
-        _tmp_st = OrderedDict({k:v for k, v in utils.clean_state_dict(checkpoint).items() if check_keep(k, _ignorekeywordlist)})
+        _tmp_st = OrderedDict({k: v for k, v in utils.clean_state_dict(
+            checkpoint).items() if check_keep(k, _ignorekeywordlist)})
 
         _load_output = model_without_ddp.load_state_dict(_tmp_st, strict=False)
         logger.info(str(_load_output))
@@ -247,8 +248,7 @@ def main(args):
                 ema_m.module.load_state_dict(utils.clean_state_dict(checkpoint['ema_model']))
             else:
                 del ema_m
-                ema_m = ModelEma(model, args.ema_decay)        
-
+                ema_m = ModelEma(model, args.ema_decay)
 
     if args.eval:
         os.environ['EVAL_FLAG'] = 'TRUE'
@@ -257,7 +257,7 @@ def main(args):
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
 
-        log_stats = {**{f'test_{k}': v for k, v in test_stats.items()} }
+        log_stats = {**{f'test_{k}': v for k, v in test_stats.items()}}
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
@@ -297,7 +297,7 @@ def main(args):
                         'ema_model': ema_m.module.state_dict(),
                     })
                 utils.save_on_master(weights, checkpoint_path)
-                
+
         # eval
         test_stats, coco_evaluator = evaluate(
             model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
@@ -325,7 +325,7 @@ def main(args):
                 ema_m.module, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir,
                 wo_class_error=wo_class_error, args=args, logger=(logger if args.save_log else None)
             )
-            log_stats.update({f'ema_test_{k}': v for k,v in ema_test_stats.items()})
+            log_stats.update({f'ema_test_{k}': v for k, v in ema_test_stats.items()})
             map_ema = ema_test_stats['coco_eval_bbox'][0]
             _isbest = best_map_holder.update(map_ema, epoch, is_ema=True)
             if _isbest:
@@ -340,15 +340,15 @@ def main(args):
         log_stats.update(best_map_holder.summary())
 
         ep_paras = {
-                'epoch': epoch,
-                'n_parameters': n_parameters
-            }
+            'epoch': epoch,
+            'n_parameters': n_parameters
+        }
         log_stats.update(ep_paras)
         try:
             log_stats.update({'now_time': str(datetime.datetime.now())})
         except:
             pass
-        
+
         epoch_time = time.time() - epoch_start_time
         epoch_time_str = str(datetime.timedelta(seconds=int(epoch_time)))
         log_stats['epoch_time'] = epoch_time_str
