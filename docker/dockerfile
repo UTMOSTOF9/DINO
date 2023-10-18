@@ -9,9 +9,7 @@ ARG TORCH_VERSION=1.13.1+${TORCH_CUDA_VERSION}
 ARG TORCHVISION_VERSION=0.14.1+${TORCH_CUDA_VERSION}
 ARG TORCHAUDIO_VERSION=0.13.1
 
-# set this to nightly for picking the nightly version of ONNXRuntime-Training
-ARG ORT_BUILD_TYPE=stable
-
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -38,12 +36,12 @@ ENV PATH=$MINICONDA_PREFIX/bin:${PATH}
 
 ARG PYTHON_EXE=$MINICONDA_PREFIX/bin/python
 
-RUN $PYTHON_EXE -m pip install pip wheel ipython fire ninja
-RUN $PYTHON_EXE -m pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116
+RUN $PYTHON_EXE -m pip install pip wheel ipython fire ninja cython tqdm
+RUN $PYTHON_EXE -m pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 \
+    --extra-index-url https://download.pytorch.org/whl/cu116
 
 # for dino prequisites
-RUN $PYTHON_EXE -m pip install cython \
-    pycocotools \
+RUN $PYTHON_EXE -m pip install pycocotools \
     submitit \
     git+https://github.com/cocodataset/panopticapi.git#egg=panopticapi \
     scipy \
@@ -54,7 +52,7 @@ RUN $PYTHON_EXE -m pip install cython \
     opencv-python
 
 # for evaluate.py
-RUN $PYTHON_EXE -m pip install torchmetrics
+RUN $PYTHON_EXE -m pip install torchmetrics==1.1.0
 
 WORKDIR /code
 
