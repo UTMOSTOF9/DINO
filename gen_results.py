@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from fire import Fire
 from PIL import Image
+from tqdm import tqdm
 
 import datasets.transforms as T
 from main import build_model_main
@@ -23,9 +24,9 @@ ID2Name = {
 }
 
 
-def main(config_path: str, ckpt_path: str, data_folder: str, device: str = 'cuda', out_folder: str = 'results'):
+def main(config_path: str, ckpt_path: str, data_folder: str, output_folder: str, device: str = 'cuda'):
     args = SLConfig.fromfile(config_path)
-    args.device = 'cuda'
+    args.device = device
     model, _, postprocessors = build_model_main(args)
     checkpoint = torch.load(ckpt_path, map_location='cpu')
     model.load_state_dict(checkpoint['model'])
@@ -38,13 +39,13 @@ def main(config_path: str, ckpt_path: str, data_folder: str, device: str = 'cuda
     ])
 
     files = Path(data_folder).glob('*.jpg')
-    out_folder = Path(out_folder)
-    if not out_folder.exists():
-        out_folder.mkdir(parents=True, exist_ok=True)
+    output_folder = Path(output_folder)
+    if not output_folder.exists():
+        output_folder.mkdir(parents=True, exist_ok=True)
 
     results_json = {}
 
-    for i, file in enumerate(files):
+    for i, file in tqdm(enumerate(files), desc='Gen results'):
         image = Image.open(file).convert("RGB")  # load image
         blob, _ = transform(image, None)
         blob = blob.to(device=device)
@@ -52,7 +53,7 @@ def main(config_path: str, ckpt_path: str, data_folder: str, device: str = 'cuda
         output = postprocessors['bbox'](output, torch.Tensor([[1.0, 1.0]]).to(device=device))[0]
 
         # visualize outputs
-        thershold = 0.3  # set a thershold
+        thershold = 0.2  # set a thershold
 
         vslzr = COCOVisualizer()
 
@@ -68,7 +69,7 @@ def main(config_path: str, ckpt_path: str, data_folder: str, device: str = 'cuda
             'size': torch.Tensor([blob.shape[1], blob.shape[2]]),
             'box_label': box_label
         }
-        vslzr.visualize(blob.cpu(), pred_dict, savepath=out_folder / f'{i:04d}.jpg', dpi=200)
+        vslzr.visualize(blob.cpu(), pred_dict, savepath=output_folder / f'{i:04d}.jpg', dpi=200)
         img_h, img_w = np.array(image).shape[:2]
         boxes = boxes.cpu().numpy().astype(float).round(5) * (img_w, img_h, img_w, img_h)
         scores = scores.cpu().numpy().astype(float).round(5)
@@ -79,7 +80,7 @@ def main(config_path: str, ckpt_path: str, data_folder: str, device: str = 'cuda
             'labels': labels.tolist(),
         }
 
-    with open(out_folder / 'results.json', 'w') as f:
+    with open(output_folder / 'results.json', 'w') as f:
         json.dump(results_json, f, indent=4)
 
 

@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torchvision.ops.boxes import nms
+
 from util import box_ops
 from util.misc import (NestedTensor, accuracy, get_world_size, interpolate,
                        inverse_sigmoid, is_dist_avail_and_initialized,
@@ -512,7 +513,7 @@ class SetCriterion(nn.Module):
             dn_neg_idx = []
             for i in range(len(targets)):
                 if len(targets[i]['labels']) > 0:
-                    t = torch.range(0, len(targets[i]['labels']) - 1).long().cuda()
+                    t = torch.arange(0, len(targets[i]['labels']) - 1, dtype=torch.long, device=device)
                     t = t.unsqueeze(0).repeat(scalar, 1)
                     tgt_idx = t.flatten()
                     output_idx = (torch.tensor(range(scalar)) * single_pad).long().cuda().unsqueeze(1) + t

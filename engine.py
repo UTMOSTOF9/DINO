@@ -8,18 +8,17 @@ import os
 import sys
 from typing import Iterable
 
-from util.utils import slprint, to_device
-
 import torch
 
 import util.misc as utils
 from datasets.coco_eval import CocoEvaluator
 from datasets.panoptic_eval import PanopticEvaluator
+from util.utils import slprint, to_device
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, max_norm: float = 0, 
+                    device: torch.device, epoch: int, max_norm: float = 0,
                     wo_class_error=False, lr_scheduler=None, args=None, logger=None, ema_m=None):
     scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
 
@@ -48,7 +47,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 outputs = model(samples, targets)
             else:
                 outputs = model(samples)
-        
+
             loss_dict = criterion(outputs, targets)
             weight_dict = criterion.weight_dict
 
@@ -68,7 +67,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             print("Loss is {}, stopping training".format(loss_value))
             print(loss_dict_reduced)
             sys.exit(1)
-
 
         # amp backward function
         if args.amp:
@@ -93,7 +91,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             if epoch >= args.ema_epoch:
                 ema_m.update(model)
 
-        metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
+        metric_logger.update(loss=loss_value)  # , **loss_dict_reduced_scaled)   , **loss_dict_reduced_unscaled)
         if 'class_error' in loss_dict_reduced:
             metric_logger.update(class_error=loss_dict_reduced['class_error'])
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
@@ -101,7 +99,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         _cnt += 1
         if args.debug:
             if _cnt % 15 == 0:
-                print("BREAK!"*5)
+                print("BREAK!" * 5)
                 break
 
     if getattr(criterion, 'loss_weight_decay', False):
@@ -109,13 +107,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     if getattr(criterion, 'tuning_matching', False):
         criterion.tuning_matching(epoch)
 
-
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     resstat = {k: meter.global_avg for k, meter in metric_logger.meters.items() if meter.count > 0}
     if getattr(criterion, 'loss_weight_decay', False):
-        resstat.update({f'weight_{k}': v for k,v in criterion.weight_dict.items()})
+        resstat.update({f'weight_{k}': v for k, v in criterion.weight_dict.items()})
     return resstat
 
 
@@ -154,7 +151,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         )
 
     _cnt = 0
-    output_state_dict = {} # for debug only
+    output_state_dict = {}  # for debug only
     for samples, targets in metric_logger.log_every(data_loader, 10, header, logger=logger):
         samples = samples.to(device)
 
@@ -177,9 +174,11 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                                     for k, v in loss_dict_reduced.items() if k in weight_dict}
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v
                                       for k, v in loss_dict_reduced.items()}
-        metric_logger.update(loss=sum(loss_dict_reduced_scaled.values()),
-                             **loss_dict_reduced_scaled,
-                             **loss_dict_reduced_unscaled)
+        metric_logger.update(
+            loss=sum(loss_dict_reduced_scaled.values()),
+            # **loss_dict_reduced_scaled,
+            # **loss_dict_reduced_unscaled
+        )
         if 'class_error' in loss_dict_reduced:
             metric_logger.update(class_error=loss_dict_reduced['class_error'])
 
@@ -203,13 +202,12 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                 res_pano[i]["file_name"] = file_name
 
             panoptic_evaluator.update(res_pano)
-        
+
         if args.save_results:
             # res_score = outputs['res_score']
             # res_label = outputs['res_label']
             # res_bbox = outputs['res_bbox']
             # res_idx = outputs['res_idx']
-
 
             for i, (tgt, res, outbbox) in enumerate(zip(targets, results, outputs['pred_boxes'])):
                 """
@@ -226,7 +224,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                 gt_bbox = tgt['boxes']
                 gt_label = tgt['labels']
                 gt_info = torch.cat((gt_bbox, gt_label.unsqueeze(-1)), 1)
-                
+
                 # img_h, img_w = tgt['orig_size'].unbind()
                 # scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=0)
                 # _res_bbox = res['boxes'] / scale_fct
@@ -253,12 +251,12 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         _cnt += 1
         if args.debug:
             if _cnt % 15 == 0:
-                print("BREAK!"*5)
+                print("BREAK!" * 5)
                 break
 
     if args.save_results:
         import os.path as osp
-        
+
         # output_state_dict['gt_info'] = torch.cat(output_state_dict['gt_info'])
         # output_state_dict['res_info'] = torch.cat(output_state_dict['res_info'])
         savepath = osp.join(args.output_dir, 'results-{}.pkl'.format(utils.get_rank()))
@@ -277,7 +275,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
     if coco_evaluator is not None:
         coco_evaluator.accumulate()
         coco_evaluator.summarize()
-        
+
     panoptic_res = None
     if panoptic_evaluator is not None:
         panoptic_res = panoptic_evaluator.summarize()
@@ -291,8 +289,6 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         stats['PQ_all'] = panoptic_res["All"]
         stats['PQ_th'] = panoptic_res["Things"]
         stats['PQ_st'] = panoptic_res["Stuff"]
-
-
 
     return stats, coco_evaluator
 
@@ -356,16 +352,16 @@ def test(model, criterion, postprocessors, data_loader, base_ds, device, output_
             for s, l, b in zip(_scores, _labels, _boxes):
                 assert isinstance(l, int)
                 itemdict = {
-                        "image_id": int(image_id), 
-                        "category_id": l, 
-                        "bbox": b, 
-                        "score": s,
-                        }
+                    "image_id": int(image_id),
+                    "category_id": l,
+                    "bbox": b,
+                    "score": s,
+                }
                 final_res.append(itemdict)
 
     if args.output_dir:
         import json
         with open(args.output_dir + f'/results{args.rank}.json', 'w') as f:
-            json.dump(final_res, f)        
+            json.dump(final_res, f)
 
     return final_res

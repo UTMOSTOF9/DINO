@@ -53,6 +53,9 @@ RUN $PYTHON_EXE -m pip install cython \
     timm \
     opencv-python
 
+# for evaluate.py
+RUN $PYTHON_EXE -m pip install torchmetrics
+
 WORKDIR /code
 
 CMD bash

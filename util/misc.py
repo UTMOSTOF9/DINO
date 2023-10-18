@@ -4,25 +4,24 @@ Misc functions, including distributed helpers.
 
 Mostly copy-paste from torchvision references.
 """
+import colorsys
+import datetime
+import json
 import os
-import random 
+import pickle
+import random
 import subprocess
 import time
 from collections import OrderedDict, defaultdict, deque
-import datetime
-import pickle
-from typing import Optional, List
+from typing import List, Optional
 
-import json, time
 import numpy as np
 import torch
 import torch.distributed as dist
-from torch import Tensor
-
-import colorsys
-
 # needed due to empty tensor bug in pytorch and torchvision 0.5
 import torchvision
+from torch import Tensor
+
 __torchvision_need_compat_flag = float(torchvision.__version__.split('.')[1]) < 7
 if __torchvision_need_compat_flag:
     from torchvision.ops import _new_empty_tensor
@@ -189,9 +188,10 @@ class MetricLogger(object):
             # print(name, str(meter))
             # import ipdb;ipdb.set_trace()
             if meter.count > 0:
-                loss_str.append(
-                    "{}: {}".format(name, str(meter))
-                )
+                if isinstance(meter.value, float):
+                    meter = f"{meter.value: 10.5f}"
+
+                loss_str.append(f"{name}: {meter}")
         return self.delimiter.join(loss_str)
 
     def synchronize_between_processes(self):
@@ -473,7 +473,7 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
-    if 'WORLD_SIZE' in os.environ and os.environ['WORLD_SIZE'] != '': # 'RANK' in os.environ and 
+    if 'WORLD_SIZE' in os.environ and os.environ['WORLD_SIZE'] != '':  # 'RANK' in os.environ and
         # args.rank = int(os.environ["RANK"])
         # args.world_size = int(os.environ['WORLD_SIZE'])
         # args.gpu = args.local_rank = int(os.environ['LOCAL_RANK'])
@@ -496,7 +496,8 @@ def init_distributed_mode(args):
         args.gpu = args.local_rank = int(os.environ['SLURM_LOCALID'])
         args.world_size = int(os.environ['SLURM_NPROCS'])
 
-        print('world size: {}, world rank: {}, local rank: {}, device_count: {}'.format(args.world_size, args.rank, args.local_rank, torch.cuda.device_count()))
+        print('world size: {}, world rank: {}, local rank: {}, device_count: {}'.format(
+            args.world_size, args.rank, args.local_rank, torch.cuda.device_count()))
     else:
         print('Not using distributed mode')
         args.distributed = False
@@ -557,26 +558,27 @@ def interpolate(input, size=None, scale_factor=None, mode="nearest", align_corne
         return torchvision.ops.misc.interpolate(input, size, scale_factor, mode, align_corners)
 
 
-
 class color_sys():
     def __init__(self, num_colors) -> None:
         self.num_colors = num_colors
-        colors=[]
+        colors = []
         for i in np.arange(0., 360., 360. / num_colors):
-            hue = i/360.
-            lightness = (50 + np.random.rand() * 10)/100.
-            saturation = (90 + np.random.rand() * 10)/100.
-            colors.append(tuple([int(j*255) for j in colorsys.hls_to_rgb(hue, lightness, saturation)]))
+            hue = i / 360.
+            lightness = (50 + np.random.rand() * 10) / 100.
+            saturation = (90 + np.random.rand() * 10) / 100.
+            colors.append(tuple([int(j * 255) for j in colorsys.hls_to_rgb(hue, lightness, saturation)]))
         self.colors = colors
 
     def __call__(self, idx):
         return self.colors[idx]
 
+
 def inverse_sigmoid(x, eps=1e-3):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1/x2)
+    return torch.log(x1 / x2)
+
 
 def clean_state_dict(state_dict):
     new_state_dict = OrderedDict()

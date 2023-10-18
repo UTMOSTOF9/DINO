@@ -9,13 +9,14 @@ import sys
 import time
 from pathlib import Path
 
-import datasets
 import numpy as np
 import torch
+from torch.utils.data import DataLoader, DistributedSampler
+
+import datasets
 import util.misc as utils
 from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, test, train_one_epoch
-from torch.utils.data import DataLoader, DistributedSampler
 from util.get_param_dicts import get_param_dict
 from util.logger import setup_logger
 from util.restore_model import freeze_params, restore_params
@@ -264,7 +265,7 @@ def main(args):
         log_stats = {**{f'test_{k}': v for k, v in test_stats.items()}}
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+                json.dump(log_stats, f, indent=4)
 
         return
 
@@ -361,7 +362,7 @@ def main(args):
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+                json.dump(log_stats, f, indent=4)
 
             # for evaluation logs
             if coco_evaluator is not None:
