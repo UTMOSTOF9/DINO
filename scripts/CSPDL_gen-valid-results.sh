@@ -1,12 +1,12 @@
-export experiment=$1
+export log_folder=$1
 
 python gen_results.py \
-	--config-path $experiment/config_cfg.py \
-	--ckpt-path $experiment/checkpoint_0004.pth \
+	--config-path $log_folder/config_cfg.py \
+	--ckpt-path $log_folder/checkpoint_best_regular.pth \
 	--data-folder data/valid \
-	--output-folder $experiment/valid-results
+	--output-folder $log_folder/valid-results
 
 
 python scripts/evaluate.py \
-	$experiment/valid-results/results.json \
-	data/annotations/val.json
+	--pred_path $log_folder/valid-results/results.json \
+	--target_path data/annotations/val.json

@@ -24,7 +24,13 @@ ID2Name = {
 }
 
 
-def main(config_path: str, ckpt_path: str, data_folder: str, output_folder: str, device: str = 'cuda'):
+def main(
+    config_path: str,
+    ckpt_path: str,
+    data_folder: str,
+    output_folder: str,
+    device: str = 'cuda',
+):
     args = SLConfig.fromfile(config_path)
     args.device = device
     model, _, postprocessors = build_model_main(args)
@@ -53,7 +59,7 @@ def main(config_path: str, ckpt_path: str, data_folder: str, output_folder: str,
         output = postprocessors['bbox'](output, torch.Tensor([[1.0, 1.0]]).to(device=device))[0]
 
         # visualize outputs
-        thershold = 0.2  # set a thershold
+        thershold = 0.3  # set a thershold
 
         vslzr = COCOVisualizer()
 

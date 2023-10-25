@@ -2,3 +2,5 @@
 0	2738	1697532252415814878	/code/models/dino/ops/build/temp.linux-x86_64-cpython-38/code/models/dino/ops/src/cpu/ms_deform_attn_cpu.o	d62adf2860350ffa
 0	8049	1697532257727842987	/code/models/dino/ops/build/temp.linux-x86_64-cpython-38/code/models/dino/ops/src/cuda/ms_deform_attn_cuda.o	61ae4a9a4da34b15
 0	10933	1697532260607858501	/code/models/dino/ops/build/temp.linux-x86_64-cpython-38/code/models/dino/ops/src/vision.o	9baebea28482a503
+34	2925	1698131154439987433	/code/models/dino/ops/build/temp.linux-x86_64-cpython-38/code/models/dino/ops/src/cpu/ms_deform_attn_cpu.o	d62adf2860350ffa
+34	11034	1698131162544054534	/code/models/dino/ops/build/temp.linux-x86_64-cpython-38/code/models/dino/ops/src/vision.o	9baebea28482a503
